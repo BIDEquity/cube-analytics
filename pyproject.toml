@@ -1,6 +1,6 @@
 [project]
 name = "cube-analytics"
-version = "1.0.3"
+version = "1.0.4"
 description = "Helper libraries for analyzing cube data"
 readme = "README.md"
 requires-python = ">=3.11"
