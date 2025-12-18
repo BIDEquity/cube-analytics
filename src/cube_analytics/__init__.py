@@ -28,17 +28,19 @@ from cube_analytics.entity_matching import (
 )
 from cube_analytics.queries.arr_bridge import ARRBridgeQueries
 from cube_analytics.schema import ColumnMapping
+from cube_analytics.revenue_recognition import recognize_revs
 
 __all__ = [
-    'ARRBridgeQueries',
-    'ColumnMapping',
+    "ARRBridgeQueries",
+    "ColumnMapping",
     # Entity matching
-    'match_entities',
-    'match_single',
-    'calculate_similarity',
-    'clean_name',
-    'MatchResult',
-    'DEFAULT_STOP_WORDS',
-    'DEFAULT_WEIGHTS',
+    "match_entities",
+    "match_single",
+    "calculate_similarity",
+    "clean_name",
+    "MatchResult",
+    "DEFAULT_STOP_WORDS",
+    "DEFAULT_WEIGHTS",
+    "recognize_revs",
 ]
-__version__ = "0.1.0"
+__version__ = "1.0.6"
