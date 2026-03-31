@@ -16,6 +16,11 @@ class RecognitionInterval(Enum):
     quarterly = '3mo'
     yearly = '1y'
 
+
+class PeriodAnchor(Enum):
+    start_of_month = 'start'
+    end_of_month = 'end'
+
 def recognize_revs(
     df: pl.DataFrame,
     id_column: str,
@@ -23,6 +28,7 @@ def recognize_revs(
     date_from_column: str,
     date_to_column: str,
     interval: RecognitionInterval = RecognitionInterval.monthly,
+    period_anchor: PeriodAnchor = PeriodAnchor.start_of_month,
     start_period: dt.date | None = None,
     end_period: dt.date | None = None,
     wide_format: bool = False,
@@ -51,9 +57,14 @@ def recognize_revs(
         min_date, max_date, eager=True, interval=interval.value
     )
 
+    if period_anchor == PeriodAnchor.end_of_month:
+        period_check = pl.col('period').dt.month_end()
+    else:
+        period_check = pl.col('period')
+
     df_recognized = df.join_where(
         dts.to_frame('period'),
-        pl.col('period') >= pl.col(date_from_column),
+        period_check >= pl.col(date_from_column),
         pl.col('period') <= pl.col(date_to_column),
     ).with_columns(
         pl.col(id_column).len().over(id_column).alias('n_periods'),

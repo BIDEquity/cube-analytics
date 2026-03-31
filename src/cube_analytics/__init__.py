@@ -28,7 +28,7 @@ from cube_analytics.entity_matching import (
 )
 from cube_analytics.queries.arr_bridge import ARRBridgeQueries
 from cube_analytics.schema import ColumnMapping
-from cube_analytics.revenue_recognition import recognize_revs
+from cube_analytics.revenue_recognition import PeriodAnchor, recognize_revs
 
 __all__ = [
     "ARRBridgeQueries",
@@ -42,5 +42,6 @@ __all__ = [
     "DEFAULT_STOP_WORDS",
     "DEFAULT_WEIGHTS",
     "recognize_revs",
+    "PeriodAnchor",
 ]
 __version__ = "1.1.0"
