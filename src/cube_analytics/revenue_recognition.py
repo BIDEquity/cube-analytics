@@ -65,7 +65,7 @@ def recognize_revs(
     df_recognized = df.join_where(
         dts.to_frame('period'),
         period_check >= pl.col(date_from_column),
-        pl.col('period') <= pl.col(date_to_column),
+        period_check <= pl.col(date_to_column),
     ).with_columns(
         pl.col(id_column).len().over(id_column).alias('n_periods'),
         pl.col(revenue_column).alias('revenue_per_period')
