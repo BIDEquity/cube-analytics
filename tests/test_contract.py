@@ -13,8 +13,8 @@ import pytest
 from cube_analytics import ContractViolation, load_contract, validate_columns
 from cube_analytics.contract import is_date_like, is_numeric
 
-# A minimal conforming cube, in the column names justrelate actually uses.
-JUSTRELATE_LIKE = {
+# A minimal conforming cube, in column names a real tenant cube uses.
+CONFORMING_CUBE = {
     'month': 'DATE',
     'group_level': 'VARCHAR',
     'group_level_id': 'VARCHAR',
@@ -66,18 +66,18 @@ class TestTypePredicates:
 
 class TestValidateColumns:
     def test_conforming_cube_passes(self):
-        r = validate_columns(JUSTRELATE_LIKE, row_count=1000)
+        r = validate_columns(CONFORMING_CUBE, row_count=1000)
         assert r.ok
         assert r.hard == []
 
     def test_conforming_cube_resolves_every_role_it_carries(self):
-        r = validate_columns(JUSTRELATE_LIKE, row_count=1)
+        r = validate_columns(CONFORMING_CUBE, row_count=1)
         assert r.resolved['period'] == 'month'
         assert r.resolved['revenue'] == 'revenue'
         assert 'customer' in r.resolved
 
     def test_missing_required_role_is_hard(self):
-        cols = {k: v for k, v in JUSTRELATE_LIKE.items() if k != 'month'}
+        cols = {k: v for k, v in CONFORMING_CUBE.items() if k != 'month'}
         r = validate_columns(cols, row_count=1)
         assert not r.ok
         assert any("'period'" in m for m in r.hard)
@@ -89,20 +89,20 @@ class TestValidateColumns:
         assert 'revenue' in msg  # the columns actually present
 
     def test_wrong_period_type_is_hard(self):
-        r = validate_columns({**JUSTRELATE_LIKE, 'month': 'DOUBLE'}, row_count=1)
+        r = validate_columns({**CONFORMING_CUBE, 'month': 'DOUBLE'}, row_count=1)
         assert any('period column' in m for m in r.hard)
 
     def test_text_period_is_allowed(self):
         # several tenants still export period as an ISO-8601 string
-        r = validate_columns({**JUSTRELATE_LIKE, 'month': 'VARCHAR'}, row_count=1)
+        r = validate_columns({**CONFORMING_CUBE, 'month': 'VARCHAR'}, row_count=1)
         assert r.ok
 
     def test_non_numeric_revenue_is_hard(self):
-        r = validate_columns({**JUSTRELATE_LIKE, 'revenue': 'VARCHAR'}, row_count=1)
+        r = validate_columns({**CONFORMING_CUBE, 'revenue': 'VARCHAR'}, row_count=1)
         assert any('revenue column' in m for m in r.hard)
 
     def test_empty_table_is_hard(self):
-        r = validate_columns(JUSTRELATE_LIKE, row_count=0)
+        r = validate_columns(CONFORMING_CUBE, row_count=0)
         assert any('no rows' in m for m in r.hard)
 
     def test_absent_table_reports_only_that(self):
@@ -111,20 +111,20 @@ class TestValidateColumns:
         assert 'missing' in r.hard[0]
 
     def test_missing_recommended_role_is_soft_not_hard(self):
-        cols = {k: v for k, v in JUSTRELATE_LIKE.items() if k != 'product'}
+        cols = {k: v for k, v in CONFORMING_CUBE.items() if k != 'product'}
         r = validate_columns(cols, row_count=1)
         assert r.ok
         assert any("'product'" in m for m in r.soft)
 
     def test_unrecognised_column_is_soft(self):
-        r = validate_columns({**JUSTRELATE_LIKE, 'wat': 'VARCHAR'}, row_count=1)
+        r = validate_columns({**CONFORMING_CUBE, 'wat': 'VARCHAR'}, row_count=1)
         assert r.ok
         assert any('wat' in m for m in r.soft)
 
     def test_tenant_extension_does_not_fail_the_build(self):
-        # crisalix carries currency columns others do not
+        # some tenants carry currency columns others do not
         r = validate_columns(
-            {**JUSTRELATE_LIKE, 'currency': 'VARCHAR', 'exchange_rate': 'DOUBLE'},
+            {**CONFORMING_CUBE, 'currency': 'VARCHAR', 'exchange_rate': 'DOUBLE'},
             row_count=1,
         )
         assert r.ok
@@ -138,7 +138,7 @@ class TestRaiseIfFailed:
         assert 'data contract' in str(exc.value)
 
     def test_silent_when_only_soft(self):
-        r = validate_columns({**JUSTRELATE_LIKE, 'wat': 'VARCHAR'}, row_count=1)
+        r = validate_columns({**CONFORMING_CUBE, 'wat': 'VARCHAR'}, row_count=1)
         r.raise_if_failed()  # must not raise
 
     def test_warn_only_callers_can_read_violations_without_raising(self):
@@ -163,6 +163,6 @@ class TestConsumerProducerAgreement:
     def test_a_cube_the_producer_accepts_is_detectable_by_the_consumer(self):
         from cube_analytics.schema import ColumnMapping
 
-        assert validate_columns(JUSTRELATE_LIKE, row_count=1).ok
-        mapping = ColumnMapping.detect(list(JUSTRELATE_LIKE))
+        assert validate_columns(CONFORMING_CUBE, row_count=1).ok
+        mapping = ColumnMapping.detect(list(CONFORMING_CUBE))
         assert mapping.period and mapping.customer and mapping.revenue

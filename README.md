@@ -120,7 +120,7 @@ tenants a window on the old version.
 ## Backwards compatibility
 
 Every public symbol exported at v1.3.0 is still exported. `PeriodAnchor` and
-`recognize_revs` in particular — `cube-pipelines` imports them for crisalix's
+`recognize_revs` in particular — `cube-pipelines` imports them for a tenant's
 end-of-month revenue recognition.
 
 Do not remove a name from `__all__` in a minor release. Consumers pin to tags
