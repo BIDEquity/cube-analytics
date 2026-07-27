@@ -1,0 +1,71 @@
+name: Release
+
+# Tagging is the release trigger. `bumpversion minor` (or patch/major) commits
+# the version bump and creates the tag; pushing that tag publishes the wheel.
+#
+#   bumpversion minor && git push && git push --tags
+#
+# Consumers install from the published asset, pinned to a tag:
+#   cube-analytics @ https://github.com/BIDEquity/cube-analytics/releases/download/v1.4.0/cube_analytics-1.4.0-py3-none-any.whl
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync
+        run: uv sync --all-extras
+
+      - name: Test
+        run: uv run python -m pytest -q
+
+      - name: Build
+        run: uv build
+
+      # A tag that disagrees with the packaged version produces an asset whose
+      # filename lies about its contents. Refuse rather than publish it.
+      - name: Assert the tag matches the packaged version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          uv run python - <<'PY'
+          import os, sys, tomllib
+          tag = os.environ['TAG'].lstrip('v')
+          version = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']
+          if tag != version:
+              sys.exit(f'tag {tag!r} does not match pyproject version {version!r}')
+          print(f'ok: tag and package agree on {version}')
+          PY
+
+      - name: Assert the contract ships inside the wheel
+        run: |
+          uv run python - <<'PY'
+          import glob, zipfile, sys
+          whl = glob.glob('dist/*.whl')[0]
+          need = 'cube_analytics/contract/cube-contract.yaml'
+          if need not in zipfile.ZipFile(whl).namelist():
+              sys.exit(f'{need} missing from {whl}')
+          print(f'ok: {need} present in {whl}')
+          PY
+
+      - name: Publish the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: true
