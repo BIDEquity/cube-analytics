@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync
+        run: uv sync --all-extras
+
+      - name: Test
+        run: uv run python -m pytest -q
+
+      - name: Build
+        run: uv build
+
+      # The contract YAML is read at runtime by load_contract(). A wheel that
+      # omits it imports fine and then fails on first use, so assert it here.
+      - name: Assert the contract ships inside the wheel
+        run: |
+          uv run python - <<'PY'
+          import glob, zipfile, sys
+          whl = glob.glob('dist/*.whl')[0]
+          names = zipfile.ZipFile(whl).namelist()
+          need = 'cube_analytics/contract/cube-contract.yaml'
+          if need not in names:
+              sys.exit(f'{need} missing from {whl}\n' + '\n'.join(names))
+          print(f'ok: {need} present in {whl}')
+          PY
+
+      # The version in the tag, the package metadata and __init__ must agree.
+      # bumpversion keeps them in step; this catches a hand-edited one.
+      - name: Assert version metadata is consistent
+        run: |
+          uv run python - <<'PY'
+          import configparser, sys, tomllib
+          import cube_analytics
+          pyproject = tomllib.load(open('pyproject.toml','rb'))['project']['version']
+          cfg = configparser.ConfigParser(); cfg.read('.bumpversion.cfg')
+          bump = cfg['bumpversion']['current_version']
+          if not (pyproject == bump == cube_analytics.__version__):
+              sys.exit(f'version mismatch: pyproject={pyproject} bumpversion={bump} '
+                       f'__init__={cube_analytics.__version__}')
+          print(f'ok: version {pyproject} consistent across all three')
+          PY
