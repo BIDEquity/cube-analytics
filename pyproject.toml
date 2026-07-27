@@ -1,6 +1,6 @@
 [project]
 name = "cube-analytics"
-version = "1.3.0"
+version = "1.4.0"
 description = "Helper libraries for analyzing cube data"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,7 +9,11 @@ dependencies = [
     "thefuzz>=0.22.1",
     "jaro-winkler>=2.0.3",
     "polars>=1.34.0",
-    "duckdb>=1.4.1"
+    "duckdb>=1.4.1",
+    "pyyaml>=6.0",
+    # pulled in with the KPI query modules that moved here from the portal
+    "loguru>=0.7.3",
+    "pyarrow>=17.0.0"
 ]
 
 [build-system]
@@ -18,3 +22,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cube_analytics"]
+# the contract YAML is data the package reads at runtime, not just a doc
+artifacts = ["src/cube_analytics/contract/*.yaml"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/cube_analytics", "tests", "README.md", "pyproject.toml"]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]

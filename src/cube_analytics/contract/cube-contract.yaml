@@ -1,0 +1,347 @@
+# Cube Data Contract Schema
+# Version: 1.0.0
+# This file is the machine-readable source of truth for the cube data contract.
+# It can be loaded by Python (cube_pipelines) and TypeScript (cube-command-center)
+# for automated validation.
+#
+# See cube-data-contract.md for human-readable specification and rationale.
+
+contract_version: "1.0.0"
+
+# ============================================================================
+# File-Level Requirements
+# ============================================================================
+file:
+  format: duckdb
+  extension: ".duckdb"
+  transport: s3
+  path_pattern: "s3://{bucket}/cubes/{YYYY}/{MM}/cube.duckdb"
+
+# ============================================================================
+# Core Table
+# ============================================================================
+core_table:
+  schema: analysis
+  name: cube_output
+  # The fully qualified name used in SQL queries from the consumer
+  qualified_name: cube_db.analysis.cube_output
+  description: >
+    Main revenue data table. One row per customer-period-product-revenue_type
+    combination. This is the single integration point between producer and consumer.
+
+  # Row grain: the combination of these semantic roles should be unique
+  grain:
+    - customer_id  # or customer if customer_id is absent
+    - period
+    - is_recurring  # or revenue_type if is_recurring is absent
+    - product       # or 'default' if product is absent
+
+# ============================================================================
+# Required Columns
+# These MUST exist. Consumer validation fails without them.
+# ============================================================================
+required_columns:
+
+  period:
+    description: >
+      First day of the month for this revenue observation.
+      Always monthly granularity.
+    allowed_names:
+      - month
+      - month_date
+      - period
+      - date
+    allowed_types:
+      - DATE
+      - VARCHAR  # ISO 8601 format: YYYY-MM-DD
+    canonical_name: month
+    examples:
+      - "2025-01-01"
+      - "2025-12-01"
+
+  customer:
+    description: >
+      Human-readable customer display name. Used in UI, charts, and reports.
+      May be a group-level name for tenants with customer hierarchies.
+    allowed_names:
+      - group_level
+      - customer
+      - customer_name
+      - name
+    allowed_types:
+      - VARCHAR
+    canonical_name: customer_name
+    examples:
+      - "Acme Corp"
+      - "L'Oreal Group"
+
+  revenue:
+    description: >
+      Revenue amount in the cube's currency. Positive = revenue,
+      negative = credit or adjustment.
+    allowed_names:
+      - revenue
+      - amount
+      - value
+      - mrr
+    allowed_types:
+      - DOUBLE
+      - DECIMAL
+      - FLOAT
+    canonical_name: revenue
+    examples:
+      - 12500.00
+      - -500.00
+
+# ============================================================================
+# Recommended Columns
+# SHOULD exist for full feature support. Consumer degrades gracefully if absent.
+# ============================================================================
+recommended_columns:
+
+  customer_id:
+    description: >
+      Unique identifier for the customer. Used for joins (corrections, QA).
+      If absent, the consumer falls back to the customer name column,
+      which may cause issues with name collisions.
+    allowed_names:
+      - group_level_id
+      - customer_id
+      - id
+    allowed_types:
+      - VARCHAR
+      - INTEGER
+      - BIGINT
+    canonical_name: customer_id
+    fallback: customer  # semantic role to fall back to
+    features_affected:
+      - "QA correction joins"
+      - "Customer deduplication"
+      - "Revenue timeseries accuracy"
+
+  product:
+    description: >
+      Product or segment name for multi-product cubes. If absent, all revenue
+      is treated as a single product ('default').
+    allowed_names:
+      - product
+      - product_name
+      - segment
+    allowed_types:
+      - VARCHAR
+    canonical_name: product
+    fallback_value: "'default'"
+    features_affected:
+      - "Multi-product anomaly detection"
+      - "Per-product ARR bridge"
+      - "Product-level analytics"
+
+  is_recurring:
+    description: >
+      Flag indicating whether this revenue is recurring (subscription) or
+      non-recurring (one-time). QA anomaly detection only analyzes recurring
+      revenue to avoid false positives from one-time charges.
+    allowed_names:
+      - is_recurring
+      - recurring
+      - revenue_type
+    allowed_types:
+      - BOOLEAN
+      - VARCHAR
+    canonical_name: is_recurring
+    canonical_type: BOOLEAN
+    # When type is VARCHAR, these values are treated as "recurring = true":
+    truthy_string_values:
+      - "true"
+      - "rec"
+      - "recurring"
+      - "yes"
+      - "1"
+    notes: >
+      New tenants SHOULD use BOOLEAN type. The VARCHAR handling exists
+      for backward compatibility with tenants using revenue_type strings
+      like 'Rec'/'Nonrec' or 'SaaS'/'Non-Recurring'.
+    features_affected:
+      - "QA anomaly detection scope"
+      - "Recurring revenue filtering"
+
+# ============================================================================
+# Optional Enrichment Columns
+# MAY exist. Consumer detects opportunistically.
+# ============================================================================
+optional_columns:
+
+  region:
+    description: "Geographic region, country, or location of the customer."
+    allowed_names:
+      - region
+      - geography
+      - location
+      - country
+    allowed_types:
+      - VARCHAR
+    canonical_name: region
+
+  industry:
+    description: "Industry, sector, or vertical classification of the customer."
+    allowed_names:
+      - industry
+      - sector
+      - vertical
+    allowed_types:
+      - VARCHAR
+    canonical_name: industry
+
+  price_increase_effect:
+    description: "Absolute impact of price increases on revenue."
+    allowed_names:
+      - price_increase_effect_absolute
+      - price_increase_effect
+      - price_effect
+    allowed_types:
+      - DOUBLE
+      - DECIMAL
+    canonical_name: price_increase_effect_absolute
+
+# ============================================================================
+# Optional Analysis Tables
+# MAY exist in the cube file. Not consumed programmatically (yet).
+# ============================================================================
+optional_tables:
+
+  bridge_tables:
+    schema: analysis
+    description: "ARR waterfall bridge analysis tables."
+    naming_patterns:
+      - "bridge_{dimension}"
+      - "arr_bridge_{dimension}"
+    known_dimensions:
+      - product
+      - country
+      - vertical
+      - total
+      - revtype
+      - category
+      - revenue_type
+
+  qa_tables:
+    schema: qa
+    description: >
+      Data quality check results from dbt models. These are pipeline-internal
+      QA checks, separate from the consumer's anomaly detection.
+    naming_patterns:
+      - "{check_description}"
+    known_tables:
+      - customer_duplicate_candidates
+      - implausible_rev_series
+      - unmapped_customers
+      - usage_no_revenue
+      - recurring_revenues_without_product
+      - revenue_delta_netsuite_zoho
+      - revenue_implausible_timerseries
+
+  custom_analysis:
+    schema: analysis
+    description: "Tenant-specific analysis tables exported as Excel sheets."
+    known_tables:
+      - ending_contracts
+
+# ============================================================================
+# Validation Rules
+# Used by both producer (cube_pipelines) and consumer (command-center)
+# ============================================================================
+validation:
+
+  producer:
+    # Checks run AFTER creating local.analysis.cube_output, BEFORE uploading to S3
+    hard_failures:
+      - check: table_exists
+        table: analysis.cube_output
+        message: "Core table analysis.cube_output must exist in the DuckDB file"
+
+      - check: required_columns_present
+        description: >
+          At least one allowed name variant for each required column role
+          must exist in the table.
+        roles:
+          - period
+          - customer
+          - revenue
+
+      - check: period_type_valid
+        description: "Period column must be DATE or date-like VARCHAR"
+
+      - check: revenue_type_numeric
+        description: "Revenue column must be a numeric type (DOUBLE, DECIMAL, FLOAT)"
+
+      - check: row_count_positive
+        description: "Table must contain at least one row"
+
+    soft_warnings:
+      - check: recommended_columns_present
+        roles:
+          - customer_id
+          - product
+          - is_recurring
+        message_template: "Recommended column '{role}' not found. Feature degradation: {features_affected}"
+
+      - check: no_unrecognized_columns
+        description: >
+          Warn if columns exist that are not in any allowed_names list.
+          May indicate naming drift from the contract.
+
+  consumer:
+    # Checks run at read time via ColumnMapping.detect()
+    hard_failures:
+      - check: required_columns_detectable
+        roles:
+          - period
+          - customer
+          - revenue
+        error_class: ValueError
+        message_template: >
+          Could not detect required columns: {missing}.
+          Available columns: {available}
+
+    soft_behavior:
+      - check: optional_columns_missing
+        action: "Set to None in ColumnMapping"
+      - check: unrecognized_columns
+        action: "Silently ignore"
+
+# ============================================================================
+# Column Detection Logic
+# Documents the matching algorithm used by ColumnMapping.detect()
+# ============================================================================
+detection:
+  algorithm: first_match_wins
+  case_sensitivity: case_insensitive
+  description: >
+    For each semantic role, iterate through allowed_names in order.
+    The first name that matches an available column (case-insensitive)
+    is selected. Priority order matters: names listed first are preferred.
+
+# ============================================================================
+# Versioning Policy
+# ============================================================================
+versioning:
+  scheme: semver
+  current: "1.0.0"
+
+  rules:
+    major:
+      - "New required column added"
+      - "Existing name variant removed"
+      - "Required column made more restrictive (e.g., type narrowed)"
+    minor:
+      - "New optional/recommended column role added"
+      - "New optional analysis table type defined"
+      - "New feature using existing columns"
+    patch:
+      - "New name variant added for existing role"
+      - "Documentation clarification"
+      - "Validation rule refined (without breaking)"
+
+  compatibility: >
+    A cube produced under contract version X.Y.Z MUST be readable by a
+    consumer implementing contract version X.*.* (same major version).

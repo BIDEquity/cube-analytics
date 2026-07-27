@@ -6,8 +6,8 @@ multiple similarity algorithms. No dependencies on command_center.
 
 Example:
     >>> from cube_analytics.entity_matching import match_entities
-    >>> source = [{"id": "1", "name": "Acme Inc."}]
-    >>> target = [{"id": "a", "name": "ACME Corporation"}]
+    >>> source = [{'id': '1', 'name': 'Acme Inc.'}]
+    >>> target = [{'id': 'a', 'name': 'ACME Corporation'}]
     >>> results = match_entities(source, target)
     >>> print(results[0].score)  # 0.85
 """
@@ -27,16 +27,47 @@ if TYPE_CHECKING:
 # Default stop words for company name matching
 DEFAULT_STOP_WORDS: set[str] = {
     # German
-    'gmbh', 'ag', 'kg', 'ev', 'mbh', 'ohg', 'gbr',
+    'gmbh',
+    'ag',
+    'kg',
+    'ev',
+    'mbh',
+    'ohg',
+    'gbr',
     # English
-    'inc', 'llc', 'ltd', 'corp', 'company', 'co', 'llp', 'lp', 'plc',
+    'inc',
+    'llc',
+    'ltd',
+    'corp',
+    'company',
+    'co',
+    'llp',
+    'lp',
+    'plc',
     # French
-    'sa', 'sarl', 'sas', 'snc', 'eurl',
+    'sa',
+    'sarl',
+    'sas',
+    'snc',
+    'eurl',
     # Generic business terms
-    'group', 'holdings', 'international', 'worldwide', 'global',
-    'solutions', 'services', 'systems', 'technologies', 'technology',
-    'consulting', 'consultancy', 'partners', 'partnership',
-    'enterprises', 'industries', 'corporation',
+    'group',
+    'holdings',
+    'international',
+    'worldwide',
+    'global',
+    'solutions',
+    'services',
+    'systems',
+    'technologies',
+    'technology',
+    'consulting',
+    'consultancy',
+    'partners',
+    'partnership',
+    'enterprises',
+    'industries',
+    'corporation',
 }
 
 # Default weights for similarity algorithms
