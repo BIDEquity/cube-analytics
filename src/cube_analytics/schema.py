@@ -48,6 +48,7 @@ COLUMN_CANDIDATES = {
         'price_effect',
     ],
     'contract_end_date': ['contract_end_date', 'contract_end', 'end_date'],
+    'churn_reason': ['churn_reason', 'churned_reason', 'cancellation_reason'],
     'cohort': ['cohort'],
     'pricing_segment': ['pricing_segment', 'price_segment'],
     # Canonical FX enrichment columns (cube-data-contract.md §4.5). Exactly
@@ -106,6 +107,7 @@ class ColumnMapping:
         entity: Optional legal entity / reporting entity column
         price_increase_effect: Optional price change impact column
         contract_end_date: Optional contract end date column (enables Revenue at Risk tab)
+        churn_reason: Optional churn reason column (customer-level attribute)
         cohort: Optional acquisition cohort column (Crisalix-specific, enables Segments tab)
         pricing_segment: Optional pricing segment column (Crisalix-specific, enables Segments tab)
         currency: Optional original (pre-conversion) currency of each row
@@ -133,6 +135,7 @@ class ColumnMapping:
     entity: str | None = None
     price_increase_effect: str | None = None
     contract_end_date: str | None = None
+    churn_reason: str | None = None
     cohort: str | None = None
     pricing_segment: str | None = None
     # Canonical FX enrichment columns (cube-data-contract.md §4.5). A cube
@@ -263,6 +266,9 @@ class ColumnMapping:
             contract_end_date=find_column(
                 COLUMN_CANDIDATES['contract_end_date'], columns
             ),
+            churn_reason=find_column(
+                COLUMN_CANDIDATES['churn_reason'], columns
+            ),
             cohort=find_column(COLUMN_CANDIDATES['cohort'], columns),
             pricing_segment=find_column(
                 COLUMN_CANDIDATES['pricing_segment'], columns
@@ -305,6 +311,7 @@ class ColumnMapping:
             'entity',
             'price_increase_effect',
             'contract_end_date',
+            'churn_reason',
             'cohort',
             'pricing_segment',
             'currency',

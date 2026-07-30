@@ -129,6 +129,18 @@ class TestValidateColumns:
         )
         assert r.ok
 
+    def test_churn_reason_is_a_recognised_optional_role(self):
+        # a cube publishing churn_reason must not trigger the naming-drift
+        # warning, and the role resolves through the contract
+        r = validate_columns(
+            {**JUSTRELATE_LIKE, 'churn_reason': 'VARCHAR'}, row_count=1
+        )
+        assert r.ok
+        assert not any('churn_reason' in m for m in r.soft)
+        c = load_contract()
+        assert c.resolve('churn_reason', ['churn_reason']) == 'churn_reason'
+        assert c.resolve('churn_reason', ['Churned_Reason']) == 'churned_reason'
+
 
 class TestRaiseIfFailed:
     def test_raises_on_hard_violation(self):

@@ -6,7 +6,7 @@
 #
 # See cube-data-contract.md for human-readable specification and rationale.
 
-contract_version: "1.0.0"
+contract_version: "1.2.0"
 
 # ============================================================================
 # File-Level Requirements
@@ -203,6 +203,58 @@ optional_columns:
       - DECIMAL
     canonical_name: price_increase_effect_absolute
 
+  # FX enrichment roles (contract 1.1.0, cube-data-contract.md §4.5). Exactly
+  # one allowed name each, on purpose: the FX-readiness classifier looks these
+  # up by the same exact names, so a variant accepted only by detection would
+  # split the two judgements. Never add name variants.
+  currency:
+    description: "Original (pre-conversion) currency of the row."
+    allowed_names:
+      - currency
+    allowed_types:
+      - VARCHAR
+    canonical_name: currency
+
+  exchange_rate:
+    description: "Rate applied to convert the row into the target currency."
+    allowed_names:
+      - exchange_rate
+    allowed_types:
+      - DOUBLE
+    canonical_name: exchange_rate
+
+  target_currency:
+    description: "Currency the revenue column is stated in."
+    allowed_names:
+      - target_currency
+    allowed_types:
+      - VARCHAR
+    canonical_name: target_currency
+
+  original_amount:
+    description: "Row's amount before conversion, in its original currency."
+    allowed_names:
+      - original_amount
+    allowed_types:
+      - DOUBLE
+    canonical_name: original_amount
+
+  # Contract 1.2.0.
+  churn_reason:
+    description: >
+      Why the customer churned. A customer-level attribute repeated on each of
+      the customer's rows; NULL for active customers and for churned customers
+      without a recorded reason. Sourced from tenant data where the source
+      carries one (abcube) or from an analyst-maintained ruling channel where
+      it does not (justrelate churn_reasons__manual seed).
+    allowed_names:
+      - churn_reason
+      - churned_reason
+      - cancellation_reason
+    allowed_types:
+      - VARCHAR
+    canonical_name: churn_reason
+
 # ============================================================================
 # Optional Analysis Tables
 # MAY exist in the cube file. Not consumed programmatically (yet).
@@ -326,7 +378,7 @@ detection:
 # ============================================================================
 versioning:
   scheme: semver
-  current: "1.0.0"
+  current: "1.2.0"
 
   rules:
     major:
