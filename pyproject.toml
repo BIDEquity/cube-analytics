@@ -1,19 +1,13 @@
 [project]
 name = "cube-analytics"
-version = "1.4.0"
-description = "Helper libraries for analyzing cube data"
+version = "2.0.0"
+description = "The cube data contract, shared by cube-pipelines and cube-command-center"
 readme = "README.md"
 requires-python = ">=3.11"
+# The contract is a YAML file and some dataclasses. Everything that needed an
+# analytics stack — Ibis, polars, duckdb, the fuzzy matchers — left in v2.0.0.
 dependencies = [
-    "ibis-framework[duckdb,polars]>=9.0.0",
-    "thefuzz>=0.22.1",
-    "jaro-winkler>=2.0.3",
-    "polars>=1.34.0",
-    "duckdb>=1.4.1",
     "pyyaml>=6.0",
-    # pulled in with the KPI query modules that moved here from the portal
-    "loguru>=0.7.3",
-    "pyarrow>=17.0.0"
 ]
 
 [build-system]

@@ -17,7 +17,7 @@ COLUMN_CANDIDATES = {
     'revenue': ['revenue', 'amount', 'value', 'mrr'],
     'customer_id': ['group_level_id', 'customer_id', 'id'],
     # Second level of the customer hierarchy (the lowest billed entity).
-    # JustRelate splits a group_level customer across many buying_centers;
+    # Some tenants split a group_level customer across many buying_centers;
     # detection/corrections happen at this sub-level when present.
     'sub_customer_id': [
         'sub_customer_id',
@@ -32,7 +32,7 @@ COLUMN_CANDIDATES = {
     # with no dedicated boolean; when a real `is_recurring` boolean exists it
     # wins, and `revenue_type` is then a recurring sub-type (see below).
     'is_recurring': ['is_recurring', 'recurring', 'revenue_type'],
-    # Recurring sub-type column (e.g. SaaS / Maintenance for JustRelate, or the
+    # Recurring sub-type column (e.g. SaaS / Maintenance, or the
     # 'Rec'/'Nonrec' flag itself when a cube reuses one column for both). When
     # present it joins the detection/correction grain (resolved_grain) so distinct
     # recurring streams form SEPARATE series instead of being summed into one. The
@@ -148,7 +148,7 @@ class ColumnMapping:
     # Ordered list of column names forming the cube's unique row key (its
     # grain), period first. None → resolved_grain() falls back to the legacy
     # [period, customer, product] default, preserving rowids for cubes that
-    # never declared a grain. Tenants whose cube is finer (e.g. JustRelate's
+    # never declared a grain. Tenants whose cube is finer (e.g. a
     # buying_center split) declare the full source grain here so detection,
     # issue keys, and correction writeback all key off the lowest grain.
     grain: list[str] | None = None
@@ -247,8 +247,8 @@ class ColumnMapping:
             revenue=revenue,  # type: ignore
             customer_id=find_column(COLUMN_CANDIDATES['customer_id'], columns),
             # sub_customer_id is OPT-IN, never auto-detected: a cube may carry
-            # a buying_center_id column yet still be analysed at customer grain
-            # (e.g. JustRelate). Set it explicitly in the stored mapping (or set
+            # a buying_center_id column yet still be analysed at customer grain.
+            # Set it explicitly in the stored mapping (or set
             # `grain`) to detect/correct at the finer level.
             product=find_column(COLUMN_CANDIDATES['product'], columns),
             is_recurring=find_column(
