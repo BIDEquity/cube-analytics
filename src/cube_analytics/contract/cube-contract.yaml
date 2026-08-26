@@ -1,12 +1,12 @@
 # Cube Data Contract Schema
-# Version: 2.0.0
+# Version: 2.1.0
 # This file is the machine-readable source of truth for the cube data contract.
 # It can be loaded by Python (cube_pipelines) and TypeScript (cube-command-center)
 # for automated validation.
 #
 # See cube-data-contract.md for human-readable specification and rationale.
 
-contract_version: "2.0.0"
+contract_version: "2.1.0"
 
 # ============================================================================
 # File-Level Requirements
@@ -344,6 +344,20 @@ optional_columns:
     allowed_types:
       - VARCHAR
     canonical_name: churn_reason
+
+  # Contract 2.1.0.
+  use_case:
+    description: >
+      The customer's main use case for the product. A customer-level
+      attribute repeated on each of the customer's rows; NULL where no use
+      case is recorded.
+    allowed_names:
+      - use_case
+      - main_use_case
+      - primary_use_case
+    allowed_types:
+      - VARCHAR
+    canonical_name: use_case
 
 # ============================================================================
 # Optional Analysis Tables

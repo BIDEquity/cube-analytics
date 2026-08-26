@@ -244,8 +244,8 @@ class TestConsumerProducerAgreement:
 class TestContractVersionTwoShape:
     """Coverage for what the 2.0.0 port added: row_key and cube_meta."""
 
-    def test_contract_version_reads_2_0_0(self):
-        assert load_contract().version == '2.0.0'
+    def test_contract_version_reads_2_1_0(self):
+        assert load_contract().version == '2.1.0'
 
     def test_row_key_is_a_required_role_with_one_allowed_name(self):
         c = load_contract()
@@ -266,12 +266,35 @@ class TestContractVersionTwoShape:
         assert 'row_key' in raw['required_columns']
 
 
+class TestContractVersionTwoDotOneShape:
+    """Coverage for 2.1.0: the optional use_case role."""
+
+    def test_use_case_is_an_optional_role_with_its_name_variants(self):
+        c = load_contract()
+        assert 'use_case' in c.optional_roles
+        assert c.allowed_names['use_case'] == (
+            'use_case',
+            'main_use_case',
+            'primary_use_case',
+        )
+
+    def test_use_case_is_detected_and_never_required(self):
+        from cube_analytics.schema import ColumnMapping
+
+        with_it = ColumnMapping.detect(
+            ['month', 'customer', 'revenue', 'main_use_case']
+        )
+        assert with_it.use_case == 'main_use_case'
+        without_it = ColumnMapping.detect(['month', 'customer', 'revenue'])
+        assert without_it.use_case is None
+
+
 class TestContractVersionAccessor:
     """A consumer can read the contract version off the top-level package,
     without opening the YAML itself."""
 
     def test_reachable_from_the_top_level_package(self):
-        assert cube_analytics.CONTRACT_VERSION == '2.0.0'
+        assert cube_analytics.CONTRACT_VERSION == '2.1.0'
 
     def test_agrees_with_load_contract_version(self):
         assert CONTRACT_VERSION == load_contract().version
