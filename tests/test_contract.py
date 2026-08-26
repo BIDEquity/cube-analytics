@@ -17,7 +17,7 @@ from cube_analytics import (
     load_contract,
     validate_columns,
 )
-from cube_analytics.contract import is_date_like, is_numeric
+from cube_analytics.contract import is_date_like, is_numeric, is_varchar_like
 
 # A minimal conforming cube, in column names a real tenant cube uses.
 CONFORMING_CUBE = {
@@ -88,6 +88,13 @@ class TestTypePredicates:
 
     def test_date_like_rejects_a_number(self):
         assert not is_date_like('DOUBLE')
+
+    @pytest.mark.parametrize('dtype', ['VARCHAR', 'TEXT', 'string', 'utf8'])
+    def test_varchar_like_accepts(self, dtype):
+        assert is_varchar_like(dtype)
+
+    def test_varchar_like_rejects_a_number(self):
+        assert not is_varchar_like('BIGINT')
 
 
 class TestValidateColumns:
@@ -170,6 +177,46 @@ class TestRaiseIfFailed:
     def test_warn_only_callers_can_read_violations_without_raising(self):
         r = validate_columns({'nope': 'VARCHAR'}, row_count=0)
         assert len(r.hard) >= 2  # this is the rollout mode: inspect, log, continue
+
+
+class TestStrictAndWarnModes:
+    """warn is the default so no existing caller's behaviour changes; strict
+    is an opt-in per call, not a package-level setting."""
+
+    def test_strict_raises_on_a_missing_required_role(self):
+        cols = {k: v for k, v in CONFORMING_CUBE.items() if k != 'row_key'}
+        with pytest.raises(ContractViolation) as exc:
+            validate_columns(cols, row_count=1, strict=True)
+        assert "'row_key'" in str(exc.value)
+
+    def test_warn_returns_the_same_violation_without_raising_on_the_same_input(self):
+        cols = {k: v for k, v in CONFORMING_CUBE.items() if k != 'row_key'}
+        r = validate_columns(cols, row_count=1)  # warn is the default
+        assert not r.ok
+        assert any("'row_key'" in m for m in r.hard)
+
+    def test_strict_does_not_raise_on_a_conforming_cube(self):
+        r = validate_columns(CONFORMING_CUBE, row_count=1, strict=True)
+        assert r.ok
+
+
+class TestRowKeyTypeCheck:
+    """Opt-in: row_key is a required role in 2.0.0, but a tenant mid-migration
+    may carry it before its type has settled."""
+
+    def test_non_varchar_row_key_is_hard_when_opted_in(self):
+        r = validate_columns(
+            {**CONFORMING_CUBE, 'row_key': 'BIGINT'}, row_count=1, check_row_key_type=True
+        )
+        assert any('row_key column' in m for m in r.hard)
+
+    def test_varchar_row_key_passes_when_opted_in(self):
+        r = validate_columns(CONFORMING_CUBE, row_count=1, check_row_key_type=True)
+        assert r.ok
+
+    def test_row_key_type_is_not_checked_unless_opted_in(self):
+        r = validate_columns({**CONFORMING_CUBE, 'row_key': 'BIGINT'}, row_count=1)
+        assert not any('row_key column' in m for m in r.hard)
 
 
 class TestConsumerProducerAgreement:
