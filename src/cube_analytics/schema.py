@@ -59,6 +59,10 @@ COLUMN_CANDIDATES = {
     'exchange_rate': ['exchange_rate'],
     'target_currency': ['target_currency'],
     'original_amount': ['original_amount'],
+    # Producer-issued row identity (contract 2.0.0). Exactly one candidate:
+    # the producer emits it under this exact name, so there is no
+    # source-column variant for the consumer to detect.
+    'row_key': ['row_key'],
 }
 
 

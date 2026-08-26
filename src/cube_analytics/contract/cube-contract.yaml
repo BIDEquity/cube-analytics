@@ -1,12 +1,12 @@
 # Cube Data Contract Schema
-# Version: 1.0.0
+# Version: 2.0.0
 # This file is the machine-readable source of truth for the cube data contract.
 # It can be loaded by Python (cube_pipelines) and TypeScript (cube-command-center)
 # for automated validation.
 #
 # See cube-data-contract.md for human-readable specification and rationale.
 
-contract_version: "1.0.0"
+contract_version: "2.0.0"
 
 # ============================================================================
 # File-Level Requirements
@@ -35,6 +35,44 @@ core_table:
     - period
     - is_recurring  # or revenue_type if is_recurring is absent
     - product       # or 'default' if product is absent
+
+# ============================================================================
+# Cube Metadata Table
+# One row per build. Declares the grain the producer built this cube against,
+# so a consumer can reproduce row_key deterministically instead of inferring
+# the grain from whichever columns happen to be present (contract 2.0.0,
+# harness-docs/adr/0023-producer-declared-grain-and-issued-row-key.md).
+# ============================================================================
+cube_meta:
+  schema: analysis
+  name: cube_meta
+  # The fully qualified name used in SQL queries from the consumer
+  qualified_name: cube_db.analysis.cube_meta
+  description: >
+    Producer-declared build metadata. One row per build. Carries the ordered
+    grain the producer used to compute row_key and the contract version the
+    cube was built against. This is the only source of grain for a 2.0.0+
+    cube; consumers must not infer it from column presence.
+
+  columns:
+    grain_columns:
+      description: >
+        JSON array of the grain column names, in the exact order the
+        producer fed them into the row_key hash for this build. The order
+        is load-bearing: row_key hashes grain values in this order, so a
+        consumer that reads this array out of order, or re-sorts it,
+        reproduces a different hash than the one the producer issued.
+      type: JSON
+      example: '["customer_id", "period", "product"]'
+
+    contract_version:
+      description: "Contract version this cube was built against."
+      type: VARCHAR
+      example: "2.0.0"
+
+    built_at:
+      description: "Timestamp the build that produced this cube completed."
+      type: TIMESTAMP
 
 # ============================================================================
 # Required Columns
@@ -92,6 +130,58 @@ required_columns:
     examples:
       - 12500.00
       - -500.00
+
+  row_key:
+    description: >
+      Producer-issued deterministic identity for this row. Unlike the other
+      required columns above, row_key has exactly one allowed name: the
+      producer emits it under this exact name, so there is no source-column
+      variant for the consumer to detect. Consumers read it directly and
+      must never derive row identity themselves — that responsibility moved
+      to the producer (contract 2.0.0,
+      harness-docs/adr/0023-producer-declared-grain-and-issued-row-key.md).
+      This is separate from, and does not replace, the existing rowid
+      mechanism computed by the consumer at query time.
+    allowed_names:
+      - row_key
+    allowed_types:
+      - VARCHAR
+    canonical_name: row_key
+    algorithm: >
+      md5 over the joined grain values, computed by the producer and
+      reproducible byte-for-byte by any consumer that follows these steps
+      in order:
+        1. Read the ordered grain column names from this build's
+           cube_meta.grain_columns. That order is the hash input order —
+           not alphabetical, not the table's column order.
+        2. For each grain column, take the value as it appears in
+           analysis.cube_output — i.e. AFTER all canonicalisation the
+           producer applies, never the raw source value — and cast it to
+           VARCHAR.
+        3. If a grain value is SQL NULL, substitute the single-byte ASCII
+           NUL control character (0x00) for it instead of the string
+           "NULL" or an empty string. 0x00 cannot occur in any VARCHAR
+           value a tenant source publishes, so it can never collide with a
+           real grain value; the string "NULL" or an empty string could.
+           This is what makes row_key NULL-safe: a NULL grain component
+           still produces a deterministic, joinable key.
+        4. Join the resulting values, in grain order, using the
+           single-byte ASCII Unit Separator control character (0x1F) as
+           the separator. 0x1F is chosen for the same reason as the NULL
+           sentinel: it is a non-printable control character that will
+           not occur in real grain data (customer names, product codes,
+           ISO dates), unlike a printable separator such as '_' or '|'.
+           It is also distinct from the NULL sentinel, so the two never
+           collide with each other.
+        5. Hash the joined string with md5(). md5 is used, not a
+           cryptographic-strength hash, because row_key is an identity
+           address for joining decisions to rows, not a security token —
+           collision resistance across one cube's row count is all that
+           is required. md5() is a DuckDB built-in, and the producer side
+           (cube_pipelines) is DuckDB/dbt, so no extension or external
+           library is needed to compute it.
+    examples:
+      - "1f3870be274f6c49b3e31a0c6728957f"
 
 # ============================================================================
 # Recommended Columns
@@ -202,6 +292,58 @@ optional_columns:
       - DOUBLE
       - DECIMAL
     canonical_name: price_increase_effect_absolute
+
+  # FX enrichment roles (contract 1.1.0, cube-data-contract.md §4.5). Exactly
+  # one allowed name each, on purpose: the FX-readiness classifier looks these
+  # up by the same exact names, so a variant accepted only by detection would
+  # split the two judgements. Never add name variants.
+  currency:
+    description: "Original (pre-conversion) currency of the row."
+    allowed_names:
+      - currency
+    allowed_types:
+      - VARCHAR
+    canonical_name: currency
+
+  exchange_rate:
+    description: "Rate applied to convert the row into the target currency."
+    allowed_names:
+      - exchange_rate
+    allowed_types:
+      - DOUBLE
+    canonical_name: exchange_rate
+
+  target_currency:
+    description: "Currency the revenue column is stated in."
+    allowed_names:
+      - target_currency
+    allowed_types:
+      - VARCHAR
+    canonical_name: target_currency
+
+  original_amount:
+    description: "Row's amount before conversion, in its original currency."
+    allowed_names:
+      - original_amount
+    allowed_types:
+      - DOUBLE
+    canonical_name: original_amount
+
+  # Contract 1.2.0.
+  churn_reason:
+    description: >
+      Why the customer churned. A customer-level attribute repeated on each of
+      the customer's rows; NULL for active customers and for churned customers
+      without a recorded reason. Sourced from tenant data where the source
+      carries one (abcube) or from an analyst-maintained ruling channel where
+      it does not (justrelate churn_reasons__manual seed).
+    allowed_names:
+      - churn_reason
+      - churned_reason
+      - cancellation_reason
+    allowed_types:
+      - VARCHAR
+    canonical_name: churn_reason
 
 # ============================================================================
 # Optional Analysis Tables
@@ -326,7 +468,12 @@ detection:
 # ============================================================================
 versioning:
   scheme: semver
-  current: "1.0.0"
+  current: "2.0.0"
+  # Why 2.0.0 is a major bump: row_key and the cube_meta grain declaration
+  # are new required producer outputs. That falls squarely under the
+  # existing "New required column added" major rule below — a cube built
+  # under 1.x has neither and cannot satisfy a 2.0.0 consumer's hard
+  # failures without a rebuild.
 
   rules:
     major:

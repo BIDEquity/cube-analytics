@@ -22,6 +22,26 @@ CONFORMING_CUBE = {
     'revenue': 'DOUBLE',
     'is_recurring': 'BOOLEAN',
     'revenue_type': 'VARCHAR',
+    'row_key': 'VARCHAR',
+}
+
+# The role -> allowed-names inventory contract 1.0.0 carried, pinned here so a
+# future re-port against a newer contract version cannot silently drop
+# something 1.0.0 promised. Contract 2.0.0 must remain a superset of this.
+CONTRACT_V1_ROLE_ALLOWED_NAMES = {
+    'period': {'month', 'month_date', 'period', 'date'},
+    'customer': {'group_level', 'customer', 'customer_name', 'name'},
+    'revenue': {'revenue', 'amount', 'value', 'mrr'},
+    'customer_id': {'group_level_id', 'customer_id', 'id'},
+    'product': {'product', 'product_name', 'segment'},
+    'is_recurring': {'is_recurring', 'recurring', 'revenue_type'},
+    'region': {'region', 'geography', 'location', 'country'},
+    'industry': {'industry', 'sector', 'vertical'},
+    'price_increase_effect': {
+        'price_increase_effect_absolute',
+        'price_increase_effect',
+        'price_effect',
+    },
 }
 
 
@@ -31,9 +51,9 @@ class TestLoadContract:
         assert c.version
         assert c.qualified_table == 'analysis.cube_output'
 
-    def test_required_roles_are_the_three_every_feature_needs(self):
+    def test_required_roles_are_the_four_every_feature_needs(self):
         c = load_contract()
-        assert set(c.required_roles) == {'period', 'customer', 'revenue'}
+        assert set(c.required_roles) == {'period', 'customer', 'revenue', 'row_key'}
 
     def test_resolve_follows_contract_priority_not_dict_order(self):
         c = load_contract()
@@ -166,3 +186,45 @@ class TestConsumerProducerAgreement:
         assert validate_columns(CONFORMING_CUBE, row_count=1).ok
         mapping = ColumnMapping.detect(list(CONFORMING_CUBE))
         assert mapping.period and mapping.customer and mapping.revenue
+
+
+class TestContractVersionTwoShape:
+    """Coverage for what the 2.0.0 port added: row_key and cube_meta."""
+
+    def test_contract_version_reads_2_0_0(self):
+        assert load_contract().version == '2.0.0'
+
+    def test_row_key_is_a_required_role_with_one_allowed_name(self):
+        c = load_contract()
+        assert 'row_key' in c.required_roles
+        assert c.allowed_names['row_key'] == ('row_key',)
+
+    def test_cube_meta_section_parses_with_its_build_metadata_columns(self):
+        import pathlib
+
+        import yaml
+
+        from cube_analytics import contract as contract_module
+
+        bundled = pathlib.Path(contract_module.__file__).parent / 'cube-contract.yaml'
+        raw = yaml.safe_load(bundled.read_text(encoding='utf-8'))
+        assert raw['cube_meta']['name'] == 'cube_meta'
+        assert 'grain_columns' in raw['cube_meta']['columns']
+        assert 'row_key' in raw['required_columns']
+
+
+class TestCarriedForwardFromContractV1:
+    """Contract 2.0.0 must be a strict superset of 1.0.0 - nothing the earlier
+    contract promised may vanish silently in a re-port. See
+    CONTRACT_V1_ROLE_ALLOWED_NAMES above for the pinned 1.0.0 inventory.
+    """
+
+    def test_every_v1_role_and_allowed_name_survives_carried_forward(self):
+        c = load_contract()
+        every_role = set(c.required_roles) | set(c.recommended_roles) | set(c.optional_roles)
+        for role, names in CONTRACT_V1_ROLE_ALLOWED_NAMES.items():
+            assert role in every_role, f"role '{role}' from contract 1.0.0 is missing in {c.version}"
+            carried = set(c.allowed_names.get(role, ()))
+            assert names <= carried, (
+                f"contract {c.version} dropped allowed name(s) for '{role}': {names - carried}"
+            )
