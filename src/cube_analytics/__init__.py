@@ -43,4 +43,4 @@ __all__ = [
     'load_contract',
     'validate_columns',
 ]
-__version__ = '2.0.0'
+__version__ = '2.1.0'

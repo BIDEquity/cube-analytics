@@ -1,6 +1,6 @@
 [project]
 name = "cube-analytics"
-version = "2.0.0"
+version = "2.1.0"
 description = "The cube data contract, shared by cube-pipelines and cube-command-center"
 readme = "README.md"
 requires-python = ">=3.11"
