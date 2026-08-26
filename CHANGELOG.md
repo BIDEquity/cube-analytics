@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/BIDEquity/cube-analytics/compare/v2.1.0...v2.2.0) (2026-08-26)
+
+
+### Features
+
+* **mirrored:** add the CCC mirrored-tables schema pin ([#7](https://github.com/BIDEquity/cube-analytics/issues/7)) ([e40f60c](https://github.com/BIDEquity/cube-analytics/commit/e40f60ce22b1bba66de7dba6b46ac8f29f0ad309))
+
 ## [2.1.0](https://github.com/BIDEquity/cube-analytics/compare/v2.0.0...v2.1.0) (2026-08-26)
 
 

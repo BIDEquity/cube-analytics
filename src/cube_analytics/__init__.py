@@ -61,4 +61,4 @@ __all__ = [
     'validate_columns',
     'validate_mirrored_columns',
 ]
-__version__ = '2.1.0'
+__version__ = '2.2.0'
