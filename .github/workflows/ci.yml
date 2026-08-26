@@ -28,18 +28,23 @@ jobs:
       - name: Build
         run: uv build
 
-      # The contract YAML is read at runtime by load_contract(). A wheel that
-      # omits it imports fine and then fails on first use, so assert it here.
+      # Both contract YAMLs are read at runtime, by load_contract() and
+      # load_mirrored_tables() respectively. A wheel missing either imports
+      # fine and then fails on first use, so assert both here in one loop.
       - name: Assert the contract ships inside the wheel
         run: |
           uv run python - <<'PY'
           import glob, zipfile, sys
           whl = glob.glob('dist/*.whl')[0]
           names = zipfile.ZipFile(whl).namelist()
-          need = 'cube_analytics/contract/cube-contract.yaml'
-          if need not in names:
-              sys.exit(f'{need} missing from {whl}\n' + '\n'.join(names))
-          print(f'ok: {need} present in {whl}')
+          needed = [
+              'cube_analytics/contract/cube-contract.yaml',
+              'cube_analytics/contract/mirrored-tables.yaml',
+          ]
+          missing = [need for need in needed if need not in names]
+          if missing:
+              sys.exit(f'{missing} missing from {whl}\n' + '\n'.join(names))
+          print(f'ok: {needed} present in {whl}')
           PY
 
       # release-please bumps pyproject.toml and __init__.py together on the
