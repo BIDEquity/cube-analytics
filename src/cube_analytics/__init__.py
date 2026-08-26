@@ -27,6 +27,7 @@ README for where each one went.
 """
 
 from cube_analytics.contract import (
+    CONTRACT_VERSION,
     ContractViolation,
     CubeContract,
     load_contract,
@@ -35,6 +36,7 @@ from cube_analytics.contract import (
 from cube_analytics.schema import ColumnMapping
 
 __all__ = [
+    'CONTRACT_VERSION',
     'ColumnMapping',
     'ContractViolation',
     'CubeContract',

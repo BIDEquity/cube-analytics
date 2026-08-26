@@ -29,16 +29,26 @@ from typing import Iterable, Mapping
 import yaml
 
 __all__ = [
-    'CubeContract',
+    'CONTRACT_VERSION',
     'ContractViolation',
+    'CubeContract',
     'ValidationResult',
-    'load_contract',
-    'validate_columns',
     'is_date_like',
     'is_numeric',
+    'load_contract',
+    'validate_columns',
 ]
 
 _BUNDLED = Path(__file__).parent / 'cube-contract.yaml'
+
+# Read eagerly at import time, not lazily behind a function call. The bundled
+# YAML ships inside the wheel and never changes without a package release, so
+# there's no staleness risk to guard against, and a plain module attribute
+# lets a caller write `cube_analytics.CONTRACT_VERSION` without a call. This
+# mirrors load_contract(), which already re-reads the same file per call.
+CONTRACT_VERSION: str = str(
+    (yaml.safe_load(_BUNDLED.read_text(encoding='utf-8')) or {}).get('contract_version', '0')
+)
 
 # Type-name fragments, matched case-insensitively against whatever the caller's
 # engine reports. Kept as fragments because DuckDB says DECIMAL(18,2) where

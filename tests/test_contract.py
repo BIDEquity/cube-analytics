@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import pytest
 
-from cube_analytics import ContractViolation, load_contract, validate_columns
+import cube_analytics
+from cube_analytics import (
+    CONTRACT_VERSION,
+    ContractViolation,
+    load_contract,
+    validate_columns,
+)
 from cube_analytics.contract import is_date_like, is_numeric
 
 # A minimal conforming cube, in column names a real tenant cube uses.
@@ -211,6 +217,17 @@ class TestContractVersionTwoShape:
         assert raw['cube_meta']['name'] == 'cube_meta'
         assert 'grain_columns' in raw['cube_meta']['columns']
         assert 'row_key' in raw['required_columns']
+
+
+class TestContractVersionAccessor:
+    """A consumer can read the contract version off the top-level package,
+    without opening the YAML itself."""
+
+    def test_reachable_from_the_top_level_package(self):
+        assert cube_analytics.CONTRACT_VERSION == '2.0.0'
+
+    def test_agrees_with_load_contract_version(self):
+        assert CONTRACT_VERSION == load_contract().version
 
 
 class TestCarriedForwardFromContractV1:
