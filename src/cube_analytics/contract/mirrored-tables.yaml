@@ -1,0 +1,115 @@
+# Mirrored CCC Table Schema Pin
+# Version: 1.0.0
+#
+# CCC (cube-command-center) mirrors five internal Postgres tables full-refresh
+# into MotherDuck, where tenant dbt models read them as the `command_center`
+# source. This file pins only the columns those downstream models, join keys
+# and change fingerprints actually consume, per table. A column not listed
+# here is explicitly unpinned — CCC stays free to add or change it without
+# breaking this contract.
+#
+# Versioned independently of contract_version in cube-contract.yaml: this
+# artifact and the cube data contract evolve on different cadences.
+
+mirrored_tables_version: "1.0.0"
+
+tables:
+  qa_corrections:
+    columns:
+      - {name: correction_id, type_class: integer, nullable: false}
+      - {name: tenant_id, type_class: integer, nullable: false}
+      - {name: rowid, type_class: text, nullable: false}
+      - {name: period, type_class: date, nullable: false}
+      - {name: customer_id, type_class: text, nullable: false}
+      - {name: product, type_class: text, nullable: false}
+      - {name: corrected_value, type_class: numeric, nullable: false}
+      - {name: is_inserted, type_class: boolean, nullable: false}
+      - {name: revenue_type, type_class: text, nullable: true}
+      - {name: corrected_at, type_class: timestamp, nullable: false}
+      - {name: voided_at, type_class: timestamp, nullable: true}
+    fingerprint:
+      # Full consumed-column set, deliberately wider than the five columns
+      # the sensor fingerprinted before: the 2026-07-08 backfill edited
+      # columns outside that narrower set and the sensor saw nothing.
+      strategy: content_hash
+      order_by: correction_id
+      columns:
+        - correction_id
+        - tenant_id
+        - rowid
+        - period
+        - customer_id
+        - product
+        - revenue_type
+        - corrected_value
+        - is_inserted
+        - corrected_at
+        - voided_at
+
+  cube_versions:
+    columns:
+      - {name: cube_version_id, type_class: integer, nullable: false}
+      - {name: tenant_id, type_class: integer, nullable: false}
+      - {name: period, type_class: timestamp, nullable: false}
+      - {name: status, type_class: text, nullable: false}
+      - {name: created_at, type_class: timestamp, nullable: false}
+      - {name: updated_at, type_class: timestamp, nullable: false}
+    # Credential-bearing columns the mirror must drop before extraction.
+    # Their presence in the mirror is itself a hard validation failure.
+    secret_columns:
+      - connection_string
+      - analyst_connection_string
+    fingerprint:
+      # No downstream dbt consumer reads this table; mirrored on trust.
+      strategy: none
+
+  churn_reason_assignments:
+    columns:
+      - {name: id, type_class: integer, nullable: false}
+      - {name: tenant_id, type_class: integer, nullable: false}
+      - {name: customer_id, type_class: text, nullable: false}
+      - {name: product, type_class: text, nullable: false}
+      - {name: revenue_type, type_class: text, nullable: false}
+      - {name: reason_id, type_class: integer, nullable: false}
+      - {name: set_by_name, type_class: text, nullable: false}
+      - {name: set_at, type_class: timestamp, nullable: false}
+    fingerprint:
+      strategy: content_hash
+      order_by: id
+      columns:
+        - id
+        - tenant_id
+        - customer_id
+        - product
+        - revenue_type
+        - reason_id
+        - set_by_name
+        - set_at
+
+  churn_reasons:
+    columns:
+      - {name: id, type_class: integer, nullable: false}
+      - {name: tenant_id, type_class: integer, nullable: false}
+      - {name: name, type_class: text, nullable: false}
+    fingerprint:
+      strategy: content_hash
+      order_by: id
+      columns:
+        - id
+        - tenant_id
+        - name
+
+  steward_decision_ledger:
+    columns:
+      - {name: written_seq, type_class: integer, nullable: false}
+      - {name: tenant_id, type_class: integer, nullable: false}
+      - {name: payload, type_class: json, nullable: false}
+      # Postgres STORED generated columns extracted from payload. Nullable
+      # because a payload missing the corresponding key yields NULL.
+      - {name: decision_id, type_class: text, nullable: true}
+      - {name: supersedes, type_class: text, nullable: true}
+      - {name: verb, type_class: text, nullable: true}
+      - {name: verdict, type_class: text, nullable: true}
+    fingerprint:
+      strategy: append_only
+      sequence_column: written_seq
