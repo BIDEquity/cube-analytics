@@ -103,26 +103,20 @@ pyarrow, loguru and two fuzzy matchers. v2.0.0 needs PyYAML.
 
 ## Releasing
 
-`bumpversion` owns the version. It updates `pyproject.toml` and
-`src/cube_analytics/__init__.py` together, commits, and tags.
+[release-please](https://github.com/googleapis/release-please) owns the
+version. Nobody runs a bump command by hand. It reads Conventional Commit
+messages on every push to `main` and keeps a release pull request open with
+the next version and a generated changelog, tracked in
+`.release-please-manifest.json` and configured in
+`release-please-config.json`.
 
-```sh
-bumpversion patch    # 2.0.0 -> 2.0.1
-bumpversion minor    # 2.0.0 -> 2.1.0
-bumpversion major    # 2.0.0 -> 3.0.0
-git push && git push --tags
-```
+Merging that PR updates `pyproject.toml` and `src/cube_analytics/__init__.py`
+together, tags the release, and publishes a GitHub Release.
+`.github/workflows/release.yml` then tests, builds, and attaches the wheel and
+sdist to that release, after asserting the contract YAML is inside the wheel.
 
-It is not in the dev dependency group and not installed here. Whoever cuts a
-release currently needs it on their own machine, which means releases depend on
-what each person happens to have. Worth fixing: the original `bumpversion` is
-unmaintained, `bump2version` reads the same `.bumpversion.cfg`, and
-`bump-my-version` is the newer successor but prefers TOML config.
-
-Pushing the tag runs `.github/workflows/release.yml`, which tests, builds, and
-attaches the wheel and sdist to a GitHub Release. The workflow refuses to
-publish if the tag disagrees with the packaged version, or if the contract YAML
-is missing from the wheel.
+The commit type on `main` decides the bump: `fix:` is a patch, `feat:` is a
+minor, and `feat!:` or a `BREAKING CHANGE:` footer is a major.
 
 ### What counts as which bump
 

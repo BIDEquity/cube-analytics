@@ -22,29 +22,40 @@ into those two arguments.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping
 
 import yaml
 
 __all__ = [
-    'CubeContract',
+    'CONTRACT_VERSION',
     'ContractViolation',
+    'CubeContract',
     'ValidationResult',
-    'load_contract',
-    'validate_columns',
     'is_date_like',
     'is_numeric',
+    'is_varchar_like',
+    'load_contract',
+    'validate_columns',
 ]
 
 _BUNDLED = Path(__file__).parent / 'cube-contract.yaml'
+
+# Read eagerly at import time, not lazily behind a function call. The bundled
+# YAML ships inside the wheel and never changes without a package release, so
+# there's no staleness risk to guard against, and a plain module attribute
+# lets a caller write `cube_analytics.CONTRACT_VERSION` without a call. This
+# mirrors load_contract(), which already re-reads the same file per call.
+CONTRACT_VERSION: str = str(
+    (yaml.safe_load(_BUNDLED.read_text(encoding='utf-8')) or {}).get('contract_version', '0')
+)
 
 # Type-name fragments, matched case-insensitively against whatever the caller's
 # engine reports. Kept as fragments because DuckDB says DECIMAL(18,2) where
 # Polars says Decimal and Postgres says numeric.
 _DATE_FRAGMENTS = ('date', 'timestamp')
-_DATE_LIKE_TEXT = ('varchar', 'text', 'string', 'utf8')
+_TEXT_FRAGMENTS = ('varchar', 'text', 'string', 'utf8')
 _NUMERIC_FRAGMENTS = (
     'double', 'decimal', 'numeric', 'float', 'real',
     'int', 'bigint', 'smallint', 'hugeint',
@@ -154,12 +165,17 @@ def is_date_like(dtype: str) -> bool:
     That is permissive by design — several tenants still export period as text.
     """
     d = dtype.lower()
-    return any(f in d for f in _DATE_FRAGMENTS) or any(f in d for f in _DATE_LIKE_TEXT)
+    return any(f in d for f in _DATE_FRAGMENTS) or any(f in d for f in _TEXT_FRAGMENTS)
 
 
 def is_numeric(dtype: str) -> bool:
     d = dtype.lower()
     return any(f in d for f in _NUMERIC_FRAGMENTS)
+
+
+def is_varchar_like(dtype: str) -> bool:
+    d = dtype.lower()
+    return any(f in d for f in _TEXT_FRAGMENTS)
 
 
 def validate_columns(
@@ -168,6 +184,8 @@ def validate_columns(
     *,
     contract: CubeContract | None = None,
     table_present: bool = True,
+    strict: bool = False,
+    check_row_key_type: bool = False,
 ) -> ValidationResult:
     """Run the producer-side contract checks.
 
@@ -177,17 +195,28 @@ def validate_columns(
         contract: defaults to the bundled contract.
         table_present: False when the core table is missing entirely. Every
             other check is meaningless then, so only that violation is reported.
+        strict: raise ContractViolation on a hard violation instead of
+            returning it for the caller to inspect. Left per-call rather than
+            a package-level setting so a caller like cube-pipelines can flip
+            from warn to raise once it is ready, without a release of this
+            package.
+        check_row_key_type: also check that row_key's type is VARCHAR-like.
+            Off by default: row_key became a required role in contract 2.0.0,
+            and a tenant mid-migration may carry the column before its type
+            has settled — a hard failure on day one would block them.
 
     Returns:
-        ValidationResult. Call `.raise_if_failed()` to turn hard violations into
-        a ContractViolation, or inspect `.hard` / `.soft` to log and continue.
-        Warn-first rollouts read the lists, strict callers raise.
+        ValidationResult. In warn mode (the default) call `.raise_if_failed()`
+        yourself, or inspect `.hard` / `.soft` to log and continue. In strict
+        mode this function has already raised by the time it would return.
     """
     c = contract or load_contract()
     result = ValidationResult()
 
     if not table_present:
         result.hard.append(f'core table {c.qualified_table} is missing')
+        if strict:
+            result.raise_if_failed()
         return result
 
     for role in c.required_roles:
@@ -212,6 +241,12 @@ def validate_columns(
     if revenue and not is_numeric(columns[revenue]):
         result.hard.append(
             f"revenue column '{revenue}' has type {columns[revenue]}, expected a numeric type"
+        )
+
+    row_key = result.resolved.get('row_key')
+    if check_row_key_type and row_key and not is_varchar_like(columns[row_key]):
+        result.hard.append(
+            f"row_key column '{row_key}' has type {columns[row_key]}, expected VARCHAR"
         )
 
     if row_count <= 0:
@@ -240,4 +275,6 @@ def validate_columns(
             'either tenant-specific extensions or naming drift'
         )
 
+    if strict:
+        result.raise_if_failed()
     return result

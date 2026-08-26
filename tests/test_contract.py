@@ -10,8 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from cube_analytics import ContractViolation, load_contract, validate_columns
-from cube_analytics.contract import is_date_like, is_numeric
+import cube_analytics
+from cube_analytics import (
+    CONTRACT_VERSION,
+    ContractViolation,
+    load_contract,
+    validate_columns,
+)
+from cube_analytics.contract import is_date_like, is_numeric, is_varchar_like
 
 # A minimal conforming cube, in column names a real tenant cube uses.
 CONFORMING_CUBE = {
@@ -22,6 +28,26 @@ CONFORMING_CUBE = {
     'revenue': 'DOUBLE',
     'is_recurring': 'BOOLEAN',
     'revenue_type': 'VARCHAR',
+    'row_key': 'VARCHAR',
+}
+
+# The role -> allowed-names inventory contract 1.0.0 carried, pinned here so a
+# future re-port against a newer contract version cannot silently drop
+# something 1.0.0 promised. Contract 2.0.0 must remain a superset of this.
+CONTRACT_V1_ROLE_ALLOWED_NAMES = {
+    'period': {'month', 'month_date', 'period', 'date'},
+    'customer': {'group_level', 'customer', 'customer_name', 'name'},
+    'revenue': {'revenue', 'amount', 'value', 'mrr'},
+    'customer_id': {'group_level_id', 'customer_id', 'id'},
+    'product': {'product', 'product_name', 'segment'},
+    'is_recurring': {'is_recurring', 'recurring', 'revenue_type'},
+    'region': {'region', 'geography', 'location', 'country'},
+    'industry': {'industry', 'sector', 'vertical'},
+    'price_increase_effect': {
+        'price_increase_effect_absolute',
+        'price_increase_effect',
+        'price_effect',
+    },
 }
 
 
@@ -31,9 +57,9 @@ class TestLoadContract:
         assert c.version
         assert c.qualified_table == 'analysis.cube_output'
 
-    def test_required_roles_are_the_three_every_feature_needs(self):
+    def test_required_roles_are_the_four_every_feature_needs(self):
         c = load_contract()
-        assert set(c.required_roles) == {'period', 'customer', 'revenue'}
+        assert set(c.required_roles) == {'period', 'customer', 'revenue', 'row_key'}
 
     def test_resolve_follows_contract_priority_not_dict_order(self):
         c = load_contract()
@@ -62,6 +88,13 @@ class TestTypePredicates:
 
     def test_date_like_rejects_a_number(self):
         assert not is_date_like('DOUBLE')
+
+    @pytest.mark.parametrize('dtype', ['VARCHAR', 'TEXT', 'string', 'utf8'])
+    def test_varchar_like_accepts(self, dtype):
+        assert is_varchar_like(dtype)
+
+    def test_varchar_like_rejects_a_number(self):
+        assert not is_varchar_like('BIGINT')
 
 
 class TestValidateColumns:
@@ -146,6 +179,46 @@ class TestRaiseIfFailed:
         assert len(r.hard) >= 2  # this is the rollout mode: inspect, log, continue
 
 
+class TestStrictAndWarnModes:
+    """warn is the default so no existing caller's behaviour changes; strict
+    is an opt-in per call, not a package-level setting."""
+
+    def test_strict_raises_on_a_missing_required_role(self):
+        cols = {k: v for k, v in CONFORMING_CUBE.items() if k != 'row_key'}
+        with pytest.raises(ContractViolation) as exc:
+            validate_columns(cols, row_count=1, strict=True)
+        assert "'row_key'" in str(exc.value)
+
+    def test_warn_returns_the_same_violation_without_raising_on_the_same_input(self):
+        cols = {k: v for k, v in CONFORMING_CUBE.items() if k != 'row_key'}
+        r = validate_columns(cols, row_count=1)  # warn is the default
+        assert not r.ok
+        assert any("'row_key'" in m for m in r.hard)
+
+    def test_strict_does_not_raise_on_a_conforming_cube(self):
+        r = validate_columns(CONFORMING_CUBE, row_count=1, strict=True)
+        assert r.ok
+
+
+class TestRowKeyTypeCheck:
+    """Opt-in: row_key is a required role in 2.0.0, but a tenant mid-migration
+    may carry it before its type has settled."""
+
+    def test_non_varchar_row_key_is_hard_when_opted_in(self):
+        r = validate_columns(
+            {**CONFORMING_CUBE, 'row_key': 'BIGINT'}, row_count=1, check_row_key_type=True
+        )
+        assert any('row_key column' in m for m in r.hard)
+
+    def test_varchar_row_key_passes_when_opted_in(self):
+        r = validate_columns(CONFORMING_CUBE, row_count=1, check_row_key_type=True)
+        assert r.ok
+
+    def test_row_key_type_is_not_checked_unless_opted_in(self):
+        r = validate_columns({**CONFORMING_CUBE, 'row_key': 'BIGINT'}, row_count=1)
+        assert not any('row_key column' in m for m in r.hard)
+
+
 class TestConsumerProducerAgreement:
     """The producer must not accept a cube the consumer will reject."""
 
@@ -166,3 +239,79 @@ class TestConsumerProducerAgreement:
         assert validate_columns(CONFORMING_CUBE, row_count=1).ok
         mapping = ColumnMapping.detect(list(CONFORMING_CUBE))
         assert mapping.period and mapping.customer and mapping.revenue
+
+
+class TestContractVersionTwoShape:
+    """Coverage for what the 2.0.0 port added: row_key and cube_meta."""
+
+    def test_contract_version_reads_2_1_0(self):
+        assert load_contract().version == '2.1.0'
+
+    def test_row_key_is_a_required_role_with_one_allowed_name(self):
+        c = load_contract()
+        assert 'row_key' in c.required_roles
+        assert c.allowed_names['row_key'] == ('row_key',)
+
+    def test_cube_meta_section_parses_with_its_build_metadata_columns(self):
+        import pathlib
+
+        import yaml
+
+        from cube_analytics import contract as contract_module
+
+        bundled = pathlib.Path(contract_module.__file__).parent / 'cube-contract.yaml'
+        raw = yaml.safe_load(bundled.read_text(encoding='utf-8'))
+        assert raw['cube_meta']['name'] == 'cube_meta'
+        assert 'grain_columns' in raw['cube_meta']['columns']
+        assert 'row_key' in raw['required_columns']
+
+
+class TestContractVersionTwoDotOneShape:
+    """Coverage for 2.1.0: the optional use_case role."""
+
+    def test_use_case_is_an_optional_role_with_its_name_variants(self):
+        c = load_contract()
+        assert 'use_case' in c.optional_roles
+        assert c.allowed_names['use_case'] == (
+            'use_case',
+            'main_use_case',
+            'primary_use_case',
+        )
+
+    def test_use_case_is_detected_and_never_required(self):
+        from cube_analytics.schema import ColumnMapping
+
+        with_it = ColumnMapping.detect(
+            ['month', 'customer', 'revenue', 'main_use_case']
+        )
+        assert with_it.use_case == 'main_use_case'
+        without_it = ColumnMapping.detect(['month', 'customer', 'revenue'])
+        assert without_it.use_case is None
+
+
+class TestContractVersionAccessor:
+    """A consumer can read the contract version off the top-level package,
+    without opening the YAML itself."""
+
+    def test_reachable_from_the_top_level_package(self):
+        assert cube_analytics.CONTRACT_VERSION == '2.1.0'
+
+    def test_agrees_with_load_contract_version(self):
+        assert CONTRACT_VERSION == load_contract().version
+
+
+class TestCarriedForwardFromContractV1:
+    """Contract 2.0.0 must be a strict superset of 1.0.0 - nothing the earlier
+    contract promised may vanish silently in a re-port. See
+    CONTRACT_V1_ROLE_ALLOWED_NAMES above for the pinned 1.0.0 inventory.
+    """
+
+    def test_every_v1_role_and_allowed_name_survives_carried_forward(self):
+        c = load_contract()
+        every_role = set(c.required_roles) | set(c.recommended_roles) | set(c.optional_roles)
+        for role, names in CONTRACT_V1_ROLE_ALLOWED_NAMES.items():
+            assert role in every_role, f"role '{role}' from contract 1.0.0 is missing in {c.version}"
+            carried = set(c.allowed_names.get(role, ()))
+            assert names <= carried, (
+                f"contract {c.version} dropped allowed name(s) for '{role}': {names - carried}"
+            )

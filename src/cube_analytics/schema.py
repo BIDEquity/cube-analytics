@@ -6,8 +6,9 @@ name candidates across the entire codebase.
 """
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from typing import Any, Sequence
+from typing import Any
 
 # Column name candidates - SINGLE SOURCE OF TRUTH
 # Order matters: first match wins during detection
@@ -59,6 +60,14 @@ COLUMN_CANDIDATES = {
     'exchange_rate': ['exchange_rate'],
     'target_currency': ['target_currency'],
     'original_amount': ['original_amount'],
+    # Producer-issued row identity (contract 2.0.0). Exactly one candidate:
+    # the producer emits it under this exact name, so there is no
+    # source-column variant for the consumer to detect.
+    'row_key': ['row_key'],
+    # Customer's main use case for the product (contract 2.1.0). A
+    # customer-level attribute like churn_reason; 'vertical' is deliberately
+    # not a candidate — it already belongs to the industry role.
+    'use_case': ['use_case', 'main_use_case', 'primary_use_case'],
 }
 
 
@@ -112,6 +121,7 @@ class ColumnMapping:
         exchange_rate: Optional rate applied to convert the row into the target currency
         target_currency: Optional currency the revenue column is stated in
         original_amount: Optional pre-conversion amount in the row's original currency
+        use_case: Optional main use case of the customer for the product
     """
 
     period: str
@@ -142,6 +152,8 @@ class ColumnMapping:
     exchange_rate: str | None = None
     target_currency: str | None = None
     original_amount: str | None = None
+    # Customer's main use case for the product (contract 2.1.0).
+    use_case: str | None = None
     # Ordered list of column names forming the cube's unique row key (its
     # grain), period first. None → resolved_grain() falls back to the legacy
     # [period, customer, product] default, preserving rowids for cubes that
@@ -277,6 +289,7 @@ class ColumnMapping:
             original_amount=find_column(
                 COLUMN_CANDIDATES['original_amount'], columns
             ),
+            use_case=find_column(COLUMN_CANDIDATES['use_case'], columns),
         )
 
     def validate_columns_exist(self, available: Sequence[str]) -> None:
