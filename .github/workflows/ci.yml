@@ -39,18 +39,16 @@ jobs:
           print(f'ok: {need} present in {whl}')
           PY
 
-      # The version in the tag, the package metadata and __init__ must agree.
-      # bumpversion keeps them in step; this catches a hand-edited one.
+      # release-please bumps pyproject.toml and __init__.py together on the
+      # release PR; this catches the two drifting from a hand-edited one.
       - name: Assert version metadata is consistent
         run: |
           uv run python - <<'PY'
-          import configparser, sys, tomllib
+          import sys, tomllib
           import cube_analytics
           pyproject = tomllib.load(open('pyproject.toml','rb'))['project']['version']
-          cfg = configparser.ConfigParser(); cfg.read('.bumpversion.cfg')
-          bump = cfg['bumpversion']['current_version']
-          if not (pyproject == bump == cube_analytics.__version__):
-              sys.exit(f'version mismatch: pyproject={pyproject} bumpversion={bump} '
+          if pyproject != cube_analytics.__version__:
+              sys.exit(f'version mismatch: pyproject={pyproject} '
                        f'__init__={cube_analytics.__version__}')
-          print(f'ok: version {pyproject} consistent across all three')
+          print(f'ok: version {pyproject} consistent with __init__')
           PY

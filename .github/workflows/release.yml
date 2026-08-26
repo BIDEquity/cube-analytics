@@ -1,25 +1,43 @@
 name: Release
 
-# Tagging is the release trigger. `bumpversion minor` (or patch/major) commits
-# the version bump and creates the tag; pushing that tag publishes the wheel.
-#
-#   bumpversion minor && git push && git push --tags
+# release-please watches Conventional Commit messages on every push to main
+# and keeps a release pull request open with the next version and changelog.
+# Merging that PR bumps pyproject.toml and __init__.py together, tags the
+# release, and publishes a GitHub Release — nobody runs a bump command by
+# hand. This workflow then builds the wheel and sdist and attaches them.
 #
 # Consumers install from the published asset, pinned to a tag:
 #   cube-analytics @ https://github.com/BIDEquity/cube-analytics/releases/download/v1.4.0/cube_analytics-1.4.0-py3-none-any.whl
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -35,21 +53,8 @@ jobs:
       - name: Build
         run: uv build
 
-      # A tag that disagrees with the packaged version produces an asset whose
-      # filename lies about its contents. Refuse rather than publish it.
-      - name: Assert the tag matches the packaged version
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          uv run python - <<'PY'
-          import os, sys, tomllib
-          tag = os.environ['TAG'].lstrip('v')
-          version = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']
-          if tag != version:
-              sys.exit(f'tag {tag!r} does not match pyproject version {version!r}')
-          print(f'ok: tag and package agree on {version}')
-          PY
-
+      # The contract YAML is read at runtime by load_contract(). A wheel that
+      # omits it imports fine and then fails on first use, so assert it here.
       - name: Assert the contract ships inside the wheel
         run: |
           uv run python - <<'PY'
@@ -61,11 +66,7 @@ jobs:
           print(f'ok: {need} present in {whl}')
           PY
 
-      - name: Publish the GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.whl
-            dist/*.tar.gz
-          generate_release_notes: true
-          fail_on_unmatched_files: true
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/*.whl dist/*.tar.gz
