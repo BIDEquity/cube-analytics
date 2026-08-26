@@ -8,6 +8,8 @@ test here rather than a downstream dbt run.
 
 from __future__ import annotations
 
+import pytest
+
 import cube_analytics
 from cube_analytics import (
     MIRRORED_TABLES_VERSION,
@@ -140,6 +142,35 @@ class TestSecretColumns:
         tables = load_mirrored_tables()
         for name in EXPECTED_TABLE_NAMES - {'cube_versions'}:
             assert tables[name].secret_columns == ()
+
+
+class TestNullableRejectsNonBoolean:
+    def test_quoted_string_nullable_raises(self, tmp_path):
+        # PyYAML parses an unquoted `false` as a real bool, but a quoted
+        # "false" parses as str — and bool("false") is True, which would
+        # silently flip a not-null pin to nullable if left uncaught.
+        pin = tmp_path / 'mirrored-tables.yaml'
+        pin.write_text(
+            'mirrored_tables_version: "1.0.0"\n'
+            'tables:\n'
+            '  churn_reasons:\n'
+            '    columns:\n'
+            '      - {name: id, type_class: integer, nullable: "false"}\n'
+        )
+        with pytest.raises(ValueError, match=r'churn_reasons\.id'):
+            load_mirrored_tables(pin)
+
+    def test_non_boolean_scalar_nullable_raises(self, tmp_path):
+        pin = tmp_path / 'mirrored-tables.yaml'
+        pin.write_text(
+            'mirrored_tables_version: "1.0.0"\n'
+            'tables:\n'
+            '  churn_reasons:\n'
+            '    columns:\n'
+            '      - {name: id, type_class: integer, nullable: 1}\n'
+        )
+        with pytest.raises(ValueError, match=r'churn_reasons\.id'):
+            load_mirrored_tables(pin)
 
 
 class TestFingerprintSpecs:

@@ -79,6 +79,24 @@ class MirroredTable:
     fingerprint: FingerprintSpec
 
 
+def _require_bool(value: object, table_name: str, column_name: str) -> bool:
+    """Reject a `nullable` value that isn't already a real bool.
+
+    YAML's implicit typing only recognises unquoted `true`/`false`; a quoted
+    string like `"false"` parses as `str` and `bool("false")` is `True`,
+    silently flipping a not-null pin to nullable. `load_mirrored_tables`
+    accepts a caller-supplied path, not only the bundled file, so a
+    malformed value from a consumer's own YAML must fail loudly at load
+    time rather than coerce into the wrong answer.
+    """
+    if isinstance(value, bool):
+        return value
+    raise ValueError(
+        f"{table_name}.{column_name}: 'nullable' must be a boolean, "
+        f'got {value!r} ({type(value).__name__})'
+    )
+
+
 def load_mirrored_tables(path: str | Path | None = None) -> Mapping[str, MirroredTable]:
     """Load the pin. Defaults to the copy bundled in this package."""
     raw = yaml.safe_load(Path(path or _BUNDLED).read_text(encoding='utf-8'))
@@ -89,7 +107,9 @@ def load_mirrored_tables(path: str | Path | None = None) -> Mapping[str, Mirrore
             col['name']: MirroredColumn(
                 name=col['name'],
                 type_class=col['type_class'],
-                nullable=bool(col.get('nullable', False)),
+                nullable=_require_bool(
+                    col.get('nullable', False), table_name, col['name'],
+                ),
             )
             for col in spec.get('columns', ())
         }

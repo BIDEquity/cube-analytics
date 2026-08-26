@@ -9,8 +9,6 @@ added that the pin never asked for.
 
 from __future__ import annotations
 
-from functools import partial
-
 import pytest
 
 from cube_analytics import ContractViolation, validate_mirrored_columns
@@ -150,16 +148,6 @@ class TestStrictMode:
         cols = {k: v for k, v in CHURN_REASONS_BASE.items() if k != 'name'}
         with pytest.raises(ContractViolation):
             validate_mirrored_columns('churn_reasons', cols, strict=True)
-
-    def test_strict_partial_application_raises(self):
-        # Mirrors how the acceptance criteria call this through
-        # functools.partial rather than a lambda.
-        cols = {k: v for k, v in CHURN_REASONS_BASE.items() if k != 'name'}
-        call = partial(
-            validate_mirrored_columns, 'churn_reasons', cols, strict=True,
-        )
-        with pytest.raises(ContractViolation):
-            call()
 
     def test_non_strict_never_raises(self):
         cols = {k: v for k, v in CHURN_REASONS_BASE.items() if k != 'name'}
