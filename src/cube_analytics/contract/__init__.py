@@ -22,9 +22,9 @@ into those two arguments.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping
 
 import yaml
 

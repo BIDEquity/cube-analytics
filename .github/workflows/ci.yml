@@ -19,6 +19,9 @@ jobs:
       - name: Sync
         run: uv sync --all-extras
 
+      - name: Lint
+        run: uv run ruff check .
+
       - name: Test
         run: uv run python -m pytest -q
 

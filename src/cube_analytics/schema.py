@@ -6,8 +6,9 @@ name candidates across the entire codebase.
 """
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from typing import Any, Sequence
+from typing import Any
 
 # Column name candidates - SINGLE SOURCE OF TRUTH
 # Order matters: first match wins during detection
