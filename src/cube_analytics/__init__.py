@@ -40,7 +40,9 @@ from cube_analytics.mirrored import (
     FingerprintSpec,
     MirroredColumn,
     MirroredTable,
+    MirroredValidationResult,
     load_mirrored_tables,
+    validate_mirrored_columns,
 )
 from cube_analytics.schema import ColumnMapping
 
@@ -53,8 +55,10 @@ __all__ = [
     'FingerprintSpec',
     'MirroredColumn',
     'MirroredTable',
+    'MirroredValidationResult',
     'load_contract',
     'load_mirrored_tables',
     'validate_columns',
+    'validate_mirrored_columns',
 ]
 __version__ = '2.1.0'

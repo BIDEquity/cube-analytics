@@ -12,8 +12,9 @@ nothing).
 Everything here is derived from `mirrored-tables.yaml`, bundled inside the
 `contract` package alongside `cube-contract.yaml` and shipped in the wheel, so
 a consumer cannot hold a different opinion about the mirror than the producer
-does. This module only loads the pin; `cube_analytics.mirrored.validate`
-checks a reported schema against it.
+does. This module loads the pin; `validate_mirrored_columns` (re-exported
+here from `cube_analytics.mirrored.validate`) checks a reported schema
+against it.
 """
 
 from __future__ import annotations
@@ -29,7 +30,9 @@ __all__ = [
     'FingerprintSpec',
     'MirroredColumn',
     'MirroredTable',
+    'MirroredValidationResult',
     'load_mirrored_tables',
+    'validate_mirrored_columns',
 ]
 
 _BUNDLED = Path(__file__).parent.parent / 'contract' / 'mirrored-tables.yaml'
@@ -104,3 +107,12 @@ def load_mirrored_tables(path: str | Path | None = None) -> Mapping[str, Mirrore
             fingerprint=fingerprint,
         )
     return tables
+
+
+# Imported after load_mirrored_tables is defined: validate.py imports it back
+# from this package, so the function must already be bound before validate.py
+# runs its own import.
+from cube_analytics.mirrored.validate import (
+    MirroredValidationResult,
+    validate_mirrored_columns,
+)
